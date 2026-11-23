@@ -1,5 +1,5 @@
 
-name: Build Team Selector
+name: Team Selector - Build NeoForge Mod
 
 on:
   workflow_dispatch:
@@ -11,10 +11,11 @@ permissions:
 
 jobs:
   build:
+    name: Compile Team Selector
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download project
+      - name: Download source code
         uses: actions/checkout@v4
 
       - name: Install Java 21
@@ -22,17 +23,42 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Configure Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build NeoForge mod
-        run: chmod +x gradlew && ./gradlew --no-daemon clean build
+      - name: Check project files
+        run: |
+          echo "Checking project..."
+          ls -la
+          test -f gradlew || {
+            echo "ERROR: Gradle Wrapper not found!"
+            exit 1
+          }
+          test -f build.gradle -o -f build.gradle.kts || {
+            echo "ERROR: Gradle build file not found!"
+            exit 1
+          }
 
-      - name: Upload compiled JAR
+      - name: Compile NeoForge mod
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean build --stacktrace
+
+      - name: List generated JAR files
+        run: |
+          echo "Generated JAR files:"
+          find build/libs -maxdepth 1 -type f -name "*.jar" -ls
+          test -n "$(find build/libs -maxdepth 1 -type f -name '*.jar' -print -quit)" || {
+            echo "ERROR: No JAR generated!"
+            exit 1
+          }
+
+      - name: Upload Team Selector JAR
         uses: actions/upload-artifact@v4
         with:
-          name: TeamSelector-JAR
+          name: TeamSelector-1.0.0
           path: build/libs/*.jar
           if-no-files-found: error
           retention-days: 14
