@@ -1,5 +1,5 @@
 
-name: Team Selector - Build
+name: Team Selector - Automatic Build
 
 on:
   workflow_dispatch:
@@ -14,8 +14,94 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar repositório
-        uses: actions/checkout@v4
+      - name: Baixar modelo oficial NeoForge 1.21.11
+        run: |
+          git clone --depth 1 \
+            https://github.com/NeoForgeMDKs/MDK-1.21.11-NeoGradle.git \
+            /tmp/neoforge-mdk
+
+          cp -a /tmp/neoforge-mdk/. "$GITHUB_WORKSPACE/"
+
+      - name: Configurar projeto Team Selector
+        run: |
+          cd "$GITHUB_WORKSPACE"
+
+          sed -i \
+            -e 's/mod_id=examplemod/mod_id=teamselector/' \
+            -e 's/mod_name=Example Mod/mod_name=Team Selector/' \
+            -e 's/mod_group_id=com.example.examplemod/mod_group_id=com.teamselector/' \
+            gradle.properties
+
+          mkdir -p src/main/java/com/teamselector
+          mkdir -p src/main/resources/assets/teamselector/lang
+
+          rm -rf src/main/java/com/example
+
+          cat > src/main/java/com/teamselector/TeamSelector.java <<'EOF'
+          package com.teamselector;
+
+          import net.minecraft.core.registries.Registries;
+          import net.minecraft.world.item.BlockItem;
+          import net.minecraft.world.item.CreativeModeTab;
+          import net.minecraft.world.item.CreativeModeTabs;
+          import net.minecraft.world.item.Items;
+          import net.minecraft.world.level.block.Block;
+          import net.minecraft.world.level.block.state.BlockBehaviour;
+          import net.minecraft.world.level.material.MapColor;
+          import net.neoforged.bus.api.IEventBus;
+          import net.neoforged.fml.common.Mod;
+          import net.neoforged.neoforge.registries.DeferredBlock;
+          import net.neoforged.neoforge.registries.DeferredItem;
+          import net.neoforged.neoforge.registries.DeferredRegister;
+          import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+
+          @Mod(TeamSelector.MOD_ID)
+          public class TeamSelector {
+              public static final String MOD_ID = "teamselector";
+
+              public static final DeferredRegister.Blocks BLOCKS =
+                  DeferredRegister.createBlocks(MOD_ID);
+
+              public static final DeferredRegister.Items ITEMS =
+                  DeferredRegister.createItems(MOD_ID);
+
+              public static final DeferredBlock<Block> TEAM_BLOCK =
+                  BLOCKS.registerSimpleBlock(
+                      "team_selector",
+                      BlockBehaviour.Properties.of()
+                          .mapColor(MapColor.COLOR_BLUE)
+                          .strength(2.0f)
+                  );
+
+              public static final DeferredItem<BlockItem> TEAM_BLOCK_ITEM =
+                  ITEMS.registerSimpleBlockItem("team_selector", TEAM_BLOCK);
+
+              public TeamSelector(IEventBus modBus) {
+                  BLOCKS.register(modBus);
+                  ITEMS.register(modBus);
+                  modBus.addListener(this::addCreative);
+              }
+
+              private void addCreative(BuildCreativeModeTabContentsEvent event) {
+                  if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) {
+                      event.accept(TEAM_BLOCK_ITEM);
+                  }
+              }
+          }
+          EOF
+
+          cat > src/main/resources/assets/teamselector/lang/pt_br.json <<'EOF'
+          {
+            "block.teamselector.team_selector": "Seletor de Times"
+          }
+          EOF
+
+          cat > README.md <<'EOF'
+          # Team Selector
+          Minecraft 1.21.11 - NeoForge 21.11.48
+          Mod ID: teamselector
+          Bloco: teamselector:team_selector
+          EOF
 
       - name: Instalar Java 21
         uses: actions/setup-java@v5
@@ -23,31 +109,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.14.3'
-
-      - name: Verificar projeto
-        run: |
-          echo "Arquivos encontrados:"
-          find . -maxdepth 4 -type f \
-            ! -path './.git/*' | sort
-
-          if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
-            echo "::error::Projeto NeoForge não encontrado: falta settings.gradle"
-            exit 1
-          fi
-
-          if [ ! -f build.gradle ] && [ ! -f build.gradle.kts ]; then
-            echo "::error::Falta build.gradle"
-            exit 1
-          fi
-
       - name: Compilar mod
-        run: gradle --no-daemon clean build
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          chmod +x gradlew
+          ./gradlew --no-daemon clean build
 
-      - name: Localizar JAR
+      - name: Verificar JAR
         run: |
           find build/libs -type f -name "*.jar" -ls
           test -n "$(find build/libs -type f -name '*.jar' -print -quit)"
@@ -58,3 +126,4 @@ jobs:
           name: TeamSelector-1.0.0
           path: build/libs/*.jar
           if-no-files-found: error
+          retention-days: 14
