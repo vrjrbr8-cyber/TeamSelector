@@ -1,5 +1,5 @@
 
-name: Team Selector - Build NeoForge Mod
+name: Team Selector - NeoForge Build
 
 on:
   workflow_dispatch:
@@ -11,51 +11,50 @@ permissions:
 
 jobs:
   build:
-    name: Compile Team Selector
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download source code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
-      - name: Configure Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Check project files
+      - name: Check project
         run: |
-          echo "Checking project..."
+          echo "Checking project files..."
           ls -la
-          test -f gradlew || {
-            echo "ERROR: Gradle Wrapper not found!"
-            exit 1
-          }
-          test -f build.gradle -o -f build.gradle.kts || {
-            echo "ERROR: Gradle build file not found!"
-            exit 1
-          }
+          find . -maxdepth 3 -type f | sort | head -200
 
-      - name: Compile NeoForge mod
+          if [ ! -f gradlew ]; then
+            echo "::error::gradlew is missing"
+            exit 1
+          fi
+
+          if [ ! -f settings.gradle ] && [ ! -f settings.gradle.kts ]; then
+            echo "::error::settings.gradle is missing"
+            exit 1
+          fi
+
+          if [ ! -f build.gradle ] && [ ! -f build.gradle.kts ]; then
+            echo "::error::build.gradle is missing"
+            exit 1
+          fi
+
+      - name: Compile mod
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon clean build --stacktrace
 
-      - name: List generated JAR files
+      - name: Find JAR
         run: |
-          echo "Generated JAR files:"
-          find build/libs -maxdepth 1 -type f -name "*.jar" -ls
-          test -n "$(find build/libs -maxdepth 1 -type f -name '*.jar' -print -quit)" || {
-            echo "ERROR: No JAR generated!"
-            exit 1
-          }
+          find build/libs -type f -name "*.jar" -ls
+          test -n "$(find build/libs -type f -name '*.jar' -print -quit)"
 
-      - name: Upload Team Selector JAR
+      - name: Upload compiled mod
         uses: actions/upload-artifact@v4
         with:
           name: TeamSelector-1.0.0
